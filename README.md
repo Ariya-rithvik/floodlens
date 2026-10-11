@@ -8,7 +8,7 @@ Track: **Heat and Water** · WeMakeDevs × AWS Environmental Hacks 2026
 
 **Live on AWS:** https://d24y0wbvz1jjie.cloudfront.net (add `?demo` for the rehearsal controls: a simulated drill and a network-cut switch)
 
-**Demo video (2 min):** [docs/floodlens-demo.mp4](docs/floodlens-demo.mp4), recorded against the live deployment. Screenshots are in [docs/screens](docs/screens).
+**Demo video (2 min 51 s):** [docs/floodlens-demo.mp4](docs/floodlens-demo.mp4), recorded against the live deployment. Screenshots are in [docs/screens](docs/screens).
 
 ## What works today
 
@@ -21,6 +21,8 @@ Track: **Heat and Water** · WeMakeDevs × AWS Environmental Hacks 2026
 | Evidence rules | Reported → corroborated (two independent devices) → verified by a responder. Hazard + "passable" at once is flagged as a conflict, never averaged. |
 | Expiry | Every observation has a lifetime. Expired evidence turns the road *stale*, never *safe*. The time lens shows what will still be known in N hours if nobody checks. |
 | Alert network | People opt in with a phone number and home place. When two independent phones confirm a hazard, responders and members within 3 km get an automated voice call through CALL-E. One round of calls per road. Numbers never leave the backend. |
+| Higher ground | "Find higher ground" lists mapped places within 3 km that are at least 10 m higher than where you are, with distance, height gain and any hazards reported near the direct line. Heights are bundled in the offline pack; online, your own height is measured for the exact point. It is not a route and knows nothing about landslide risk. |
+| Street view | With a connection, a link opens street-level imagery for a road or a higher-ground option. |
 | Response desk | Inspection queue ordered by urgency, with corroboration rate, stale count and median seen-to-delivered time. |
 
 Tested and not tested: the flow above was exercised in a desktop browser against the live deployment, and one real CALL-E call was placed to a consenting number from the local backend. Camera QR scanning and photo capture have not been verified on physical phones in this repo's history.
@@ -70,7 +72,7 @@ aws s3 sync web/dist s3://SITE_BUCKET --delete
 - **CloudFront + S3**: serves the PWA over HTTPS (required for camera and service worker) and the photo evidence.
 - **API Gateway (HTTP API) + Lambda**: `/api/sync` ingests batches, `/api/reports` returns the shared picture.
 - **DynamoDB**: one item per report ID, written with a conditional put so concurrent carriers cannot create duplicates.
-- **Amazon Bedrock** (optional, `BedrockModelId` parameter): one-sentence read of each photo to help a reviewer. It never sets a road status.
+- **Amazon Bedrock** (`BedrockModelId` parameter, set to Nova Lite on the live stack): one-sentence read of each photo to help a reviewer. It never sets a road status. Not yet seen working: the AWS account was still under Bedrock verification at submission time.
 - **SAM**: the whole stack is `backend/template.yaml`.
 
 Voice calls use the CALL-E Developer API, triggered from Lambda (`backend/src/calle.mjs`). They are off unless the `CalleApiKey` deploy parameter is set, and `CalleAllowedNumbers` restricts dialling to a fixed list.

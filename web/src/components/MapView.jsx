@@ -16,7 +16,7 @@ const ROAD_STYLE = {
 const DASH = { stale: '2 9', conflict: '12 8', unknown: null };
 
 /** The map is drawn entirely from the bundled pack: no tiles, so nothing to fetch when the network is gone. */
-export default function MapView({ statuses, selected, focus, picking, onTap }) {
+export default function MapView({ statuses, selected, focus, picking, guide, onTap }) {
   const el = useRef(null);
   const ref = useRef({});
   const tapRef = useRef(onTap);
@@ -54,7 +54,7 @@ export default function MapView({ statuses, selected, focus, picking, onTap }) {
 
     const resize = new ResizeObserver(() => map.invalidateSize());
     resize.observe(el.current);
-    ref.current = { map, overlay: L.layerGroup().addTo(map), pick: L.layerGroup().addTo(map) };
+    ref.current = { map, overlay: L.layerGroup().addTo(map), pick: L.layerGroup().addTo(map), guide: L.layerGroup().addTo(map) };
     return () => (resize.disconnect(), map.remove());
   }, []);
 
@@ -101,6 +101,21 @@ export default function MapView({ statuses, selected, focus, picking, onTap }) {
     if (map.getSize().x) map.flyTo([focus.lat, focus.lon], zoom, { duration: 0.7 });
     else map.setView([focus.lat, focus.lon], zoom, { animate: false });
   }, [focus]);
+
+  // Straight line from the person to the chosen higher place: a bearing, deliberately not drawn along roads.
+  const guideKey = guide ? JSON.stringify(guide) : '';
+  useEffect(() => {
+    const { guide: layer, map } = ref.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (!guide) return;
+    const dot = (cls) => L.divIcon({ className: `guide-dot ${cls}`, iconSize: [18, 18], iconAnchor: [9, 9] });
+    L.marker(guide.from, { interactive: false, icon: dot('guide-here') }).addTo(layer);
+    if (!guide.to) return;
+    L.polyline([guide.from, guide.to], { interactive: false, color: '#3ee0c5', weight: 3, dashArray: '2 9', lineCap: 'round' }).addTo(layer);
+    L.marker(guide.to, { interactive: false, icon: dot('guide-there') }).addTo(layer);
+    if (map.getSize().x) map.fitBounds([guide.from, guide.to], { paddingTopLeft: [50, 110], paddingBottomRight: [50, 380], maxZoom: 15.5 });
+  }, [guideKey]);
 
   return (
     <div className={`map ${picking ? 'map-picking' : ''}`}>

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapView from './components/MapView.jsx';
 import { DeskPanel, RelayPanel } from './components/panels.jsx';
-import { QrModal, ReportSheet, Scanner, SegmentSheet, Ticket } from './components/sheets.jsx';
+import { GuideSheet, QrModal, ReportSheet, Scanner, SegmentSheet, Ticket } from './components/sheets.jsx';
+import { groundHeight, higherGround } from './lib/guide.js';
 import { allReports, clearReports, getDevice, importReport, newReportId, prefs, putReport } from './lib/db.js';
 import { decodeReport } from './lib/codec.js';
 import { buildDrill } from './lib/drill.js';
@@ -33,6 +34,7 @@ export default function App() {
   const [focus, setFocus] = useState(null);
   const [picking, setPicking] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [guide, setGuide] = useState(null);
   const [ticketId, setTicketId] = useState(null);
   const [qr, setQr] = useState(null);
   const [scanning, setScanning] = useState(false);
@@ -90,9 +92,18 @@ export default function App() {
     setDraft({ lat, lon, seg: hit.id, metres: hit.metres, viaGps: !!gps, accuracy: gps ? Math.round(gps) : 0 });
   };
 
+  // "Where is higher ground from here?" Uses the heights stored in the offline pack; a connection only refines the person's own height.
+  const startGuide = async (lat, lon) => {
+    setPicking(false);
+    setSelected(null);
+    const height = await groundHeight(lat, lon, net.online);
+    setGuide({ lat, lon, height, chosen: 0 });
+  };
+
   const onMapTap = (lat, lon) => {
+    if (picking === 'guide') return startGuide(lat, lon);
     if (picking) return startDraft(lat, lon);
-    if (draft) return;
+    if (draft || guide) return;
     const hit = nearestRoad(lat, lon);
     setSelected(hit.metres < 120 ? hit.id : null);
     if (tab !== 'desk') setTab('map');
@@ -101,7 +112,11 @@ export default function App() {
   const useGps = () => {
     if (!navigator.geolocation) return say('This device has no location service. Tap the road on the map.');
     navigator.geolocation.getCurrentPosition(
-      (p) => (inPack(p.coords.latitude, p.coords.longitude) ? startDraft(p.coords.latitude, p.coords.longitude, p.coords.accuracy) : say('You are outside the downloaded area. Tap the road on the map instead.')),
+      (p) => {
+        if (!inPack(p.coords.latitude, p.coords.longitude)) return say('You are outside the downloaded area. Tap the map instead.');
+        if (picking === 'guide') startGuide(p.coords.latitude, p.coords.longitude);
+        else startDraft(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
+      },
       () => say('Could not get a GPS fix. Tap the road on the map.'),
       { enableHighAccuracy: true, timeout: 10000 },
     );
@@ -173,7 +188,9 @@ export default function App() {
   };
 
   const ticket = ticketId && reports.find((r) => r.report_id === ticketId);
-  const sheetOpen = tab !== 'relay' && (draft || selected);
+  const sheetOpen = tab !== 'relay' && (draft || selected || guide);
+  const options = useMemo(() => (guide ? higherGround(guide.lat, guide.lon, guide.height.metres, statuses) : []), [guide, statuses]);
+  const guideLine = guide && { from: [guide.lat, guide.lon], to: options[guide.chosen] && [options[guide.chosen].lat, options[guide.chosen].lon] };
 
   return (
     <div className={`app tab-${tab} ${sheetOpen ? 'has-sheet' : ''}`}>
@@ -186,7 +203,7 @@ export default function App() {
         </button>
       </header>
 
-      <MapView statuses={statuses} selected={selected} focus={focus} picking={picking} onTap={onMapTap} />
+      <MapView statuses={statuses} selected={selected} focus={focus} picking={picking} guide={guideLine} onTap={onMapTap} />
 
       {tab !== 'relay' && !picking && (
         <div className={`lens ${lensH ? 'lens-on' : ''}`}>
@@ -200,7 +217,7 @@ export default function App() {
 
       {picking && (
         <div className="pickbar">
-          <b>Tap the road where you saw it</b>
+          <b>{picking === 'guide' ? 'Tap where you are now' : 'Tap the road where you saw it'}</b>
           <div className="row">
             <button className="btn btn-primary" onClick={useGps}>Use my GPS position</button>
             <button className="btn btn-ghost" onClick={() => setPicking(false)}>Cancel</button>
@@ -209,14 +226,18 @@ export default function App() {
       )}
 
       {tab === 'map' && !sheetOpen && !picking && <button className="fab" onClick={() => setPicking(true)}>Report what you see</button>}
+      {tab === 'map' && !sheetOpen && !picking && <button className="guide-btn" onClick={() => setPicking('guide')}>▲ Find higher ground</button>}
 
       {tab === 'relay' && <RelayPanel reports={reports} now={realNow} net={net} sync={sync} device={device} responder={responder} actions={actions} />}
       {tab === 'desk' && <DeskPanel statuses={statuses} reports={reports} now={realNow} lensH={lensH} onOpen={(seg) => (setSelected(seg), setFocus({ lat: roadMid(seg)[0], lon: roadMid(seg)[1] }))} />}
 
+      {tab !== 'relay' && guide && !draft && (
+        <GuideSheet guide={guide} options={options} online={net.online} onChoose={(i) => setGuide({ ...guide, chosen: i })} onClose={() => setGuide(null)} />
+      )}
       {tab !== 'relay' && draft && <ReportSheet pick={draft} onCancel={() => setDraft(null)} onSave={(f) => save(f, draft)} />}
-      {tab !== 'relay' && !draft && selected && (
+      {tab !== 'relay' && !draft && !guide && selected && (
         <SegmentSheet
-          segId={selected} info={statuses.get(selected)} now={now} realNow={realNow} responder={responder}
+          segId={selected} info={statuses.get(selected)} now={now} realNow={realNow} responder={responder} online={net.online}
           onClose={() => setSelected(null)} onVerify={verify}
           onReport={() => { const [lat, lon] = roadMid(selected); startDraft(lat, lon, null, selected); }}
         />

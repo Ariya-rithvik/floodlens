@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
 import { KINDS, STATUS, ago } from '../lib/status.js';
-import { roadName } from '../lib/pack.js';
+import { roadMid, roadName } from '../lib/pack.js';
+import { streetViewUrl } from '../lib/guide.js';
 import { encodeReport } from '../lib/codec.js';
 
 const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -86,7 +87,37 @@ export function Observation({ r, now }) {
   );
 }
 
-export function SegmentSheet({ segId, info, now, realNow, responder, onClose, onReport, onVerify }) {
+/** Options for reaching higher ground. It lays out what is known and leaves the decision with the person. */
+export function GuideSheet({ guide, options, online, onChoose, onClose }) {
+  return (
+    <section className="sheet sheet-guide" style={{ '--c': '#3ee0c5' }}>
+      <button className="sheet-close" onClick={onClose} aria-label="Close">×</button>
+      <div className="sheet-eyebrow">Higher ground from where you are</div>
+      <h2>You are at about {guide.height.metres} m</h2>
+      <p className="muted">Height {guide.height.source}.</p>
+      <p className="guide-warning">
+        This compares ground height for rising water. It is not a route, it does not know about landslide risk, and a way with no reports is unknown, not clear. Follow official evacuation instructions when you have them.
+      </p>
+      {options.length === 0 && <p className="empty">No mapped place within 3 km is clearly higher than this point. Move away from the river and uphill, and stay off bridges.</p>}
+      <ol className="guide-list">
+        {options.map((o, i) => (
+          <li key={o.name} className={i === guide.chosen ? 'on' : ''}>
+            <button className="guide-main" onClick={() => onChoose(i)}>
+              <b>{o.name}</b>
+              <span>{o.kind} · {o.metres >= 1000 ? `${(o.metres / 1000).toFixed(1)} km` : `${o.metres} m`} in a straight line · {o.gain} m higher</span>
+              <em className={o.known.length ? 'bad' : ''}>
+                {o.known.length ? `Reported near the direct line: ${o.known.join(', ')}` : 'No reports near the direct line. Unknown, not confirmed clear.'}
+              </em>
+            </button>
+            {online && <a className="btn btn-small" href={streetViewUrl(o.lat, o.lon)} target="_blank" rel="noreferrer">Street view</a>}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+export function SegmentSheet({ segId, info, now, realNow, responder, online, onClose, onReport, onVerify }) {
   const status = info?.status || 'unknown';
   const obs = info ? [...info.observations].sort((a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at)) : [];
   const minsLeft = info?.expiresAt ? Math.round((info.expiresAt - now) / 60000) : null;
@@ -107,6 +138,7 @@ export function SegmentSheet({ segId, info, now, realNow, responder, onClose, on
       )}
       <div className="sheet-actions">
         <button className="btn" onClick={onReport}>Add an observation here</button>
+        {online && roadMid(segId) && <a className="btn btn-ghost" href={streetViewUrl(...roadMid(segId))} target="_blank" rel="noreferrer">Street view</a>}
         {responder && (
           <>
             <button className="btn btn-danger" onClick={() => onVerify('closed')}>Verify closed</button>
