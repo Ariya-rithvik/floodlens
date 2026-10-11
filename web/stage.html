@@ -1,0 +1,55 @@
+<!doctype html>
+<!-- Recording stage for the demo video: two phone-sized copies of the app and a wide response desk, with captions.
+     Dev server only (not part of the build). Driven by tools/record-demo.mjs. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>FloodLens demo stage</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #05080b; color: #e8eff4; font-family: system-ui, 'Segoe UI', sans-serif; overflow: hidden; }
+      .top { position: absolute; top: 28px; left: 48px; right: 48px; display: flex; justify-content: space-between; align-items: center; }
+      .brand { font-size: 26px; font-weight: 700; display: flex; gap: 12px; align-items: center; }
+      .brand i { width: 20px; height: 20px; border-radius: 50%; border: 3.5px solid #3ee0c5; box-shadow: 0 8px 0 -4.5px #ff9a3d; }
+      .step { font: 600 15px ui-monospace, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #8d9ca8; }
+      .phones, .desk { position: absolute; top: 92px; left: 0; right: 0; height: 800px; display: flex; justify-content: center; gap: 120px; }
+      .device { display: grid; gap: 10px; justify-items: center; align-content: start; }
+      .device b { font: 600 14px ui-monospace, Consolas, monospace; letter-spacing: 0.1em; text-transform: uppercase; color: #8d9ca8; }
+      .device iframe { width: 400px; height: 760px; border: 0; border-radius: 34px; outline: 10px solid #1a252e; background: #0a0f13; }
+      .desk iframe { width: 1560px; height: 780px; border: 0; border-radius: 18px; outline: 8px solid #1a252e; background: #0a0f13; }
+      .caption { position: absolute; left: 0; right: 0; bottom: 0; height: 172px; padding: 0 160px; display: grid; place-items: center; text-align: center; font-size: 34px; line-height: 1.3; font-weight: 600; background: linear-gradient(#05080b00, #05080b 30%); transition: opacity 0.25s; }
+      .caption small { display: block; font-size: 21px; font-weight: 400; color: #8d9ca8; margin-top: 8px; }
+      .card { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 220px; background: radial-gradient(90% 70% at 50% 40%, #0f1a21, #05080b); }
+      .card h1 { font-size: 84px; margin: 0 0 18px; letter-spacing: -0.02em; }
+      .card h2 { font-size: 40px; font-weight: 500; margin: 0 0 30px; color: #c9d4dc; line-height: 1.3; }
+      .card p { font-size: 26px; color: #8d9ca8; margin: 8px 0; line-height: 1.45; }
+      .card em { color: #ff9a3d; font-style: normal; }
+      .card .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin: 34px 0; }
+      .card .grid div { border: 1px solid #24323d; border-radius: 16px; padding: 22px 14px; background: #10181e; font-size: 22px; }
+      .card .grid b { display: block; color: #3ee0c5; font-size: 24px; margin-bottom: 8px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="top"><div class="brand"><i></i>FloodLens</div><div class="step" id="step"></div></div>
+    <div class="phones" id="phones" hidden>
+      <div class="device"><b id="labelA">Phone A · resident</b><iframe id="A"></iframe></div>
+      <div class="device"><b id="labelB">Phone B · volunteer</b><iframe id="B"></iframe></div>
+    </div>
+    <div class="desk" id="desk" hidden><iframe id="D"></iframe></div>
+    <div class="caption" id="caption"></div>
+    <div class="card" id="card" hidden></div>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      window.stage = {
+        base: '',
+        load(id, slot) { $(id).src = `${this.base}/?device=${slot}&demo`; },
+        show(which) { for (const k of ['phones', 'desk', 'card']) $(k).hidden = k !== which; },
+        card(html) { $('card').innerHTML = `<div>${html}</div>`; this.show('card'); },
+        caption(text, small = '') { $('caption').innerHTML = `<div>${text}${small ? `<small>${small}</small>` : ''}</div>`; },
+        step(text) { $('step').textContent = text; },
+        label(id, text) { $('label' + id).textContent = text; },
+      };
+    </script>
+  </body>
+</html>

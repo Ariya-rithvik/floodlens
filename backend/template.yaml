@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: FloodLens - offline-first road-condition evidence. API (Lambda + DynamoDB + S3) and the PWA behind one CloudFront distribution.
+
+Parameters:
+  ResponderKey:
+    Type: String
+    NoEcho: true
+    Description: Shared key that lets a device record authority-verified closures. Stand-in for Cognito in this prototype.
+  CalleApiKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional. CALL-E Developer API key. When set, the alert network places real voice calls.
+  CalleAllowedNumbers:
+    Type: String
+    Default: ''
+    Description: Optional. Comma-separated phone numbers with country code. When set, the alert network never dials anyone else.
+  BedrockModelId:
+    Type: String
+    Default: ''
+    Description: Optional. A Bedrock vision model or inference profile ID enabled in this account. Leave empty to skip photo reading.
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    Timeout: 29
+    MemorySize: 512
+
+Resources:
+  Reports:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{ AttributeName: report_id, AttributeType: S }]
+      KeySchema: [{ AttributeName: report_id, KeyType: HASH }]
+
+  Site:
+    Type: AWS::S3::Bucket
+
+  Api:
+    Type: AWS::Serverless::HttpApi
+
+  Ingest:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: aws.handler
+      Environment:
+        Variables:
+          TABLE: !Ref Reports
+          BUCKET: !Ref Site
+          RESPONDER_KEY: !Ref ResponderKey
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          CALLE_API_KEY: !Ref CalleApiKey
+          CALLE_ALLOWED_NUMBERS: !Ref CalleAllowedNumbers
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Reports }
+        - S3WritePolicy: { BucketName: !Ref Site }
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        Any:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: '/api/{proxy+}', Method: ANY }
+
+  SiteAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig: { Name: !Sub '${AWS::StackName}-site', OriginAccessControlOriginType: s3, SigningBehavior: always, SigningProtocol: sigv4 }
+
+  Cdn:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        Origins:
+          - Id: site
+            DomainName: !GetAtt Site.RegionalDomainName
+            OriginAccessControlId: !Ref SiteAccess
+            S3OriginConfig: { OriginAccessIdentity: '' }
+          - Id: api
+            DomainName: !Sub '${Api}.execute-api.${AWS::Region}.amazonaws.com'
+            CustomOriginConfig: { OriginProtocolPolicy: https-only }
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # Managed-AllViewerExceptHostHeader
+
+  SitePolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Site
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub '${Site.Arn}/*'
+            Condition:
+              StringEquals: { 'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${Cdn}' }
+
+Outputs:
+  AppUrl:
+    Value: !Sub 'https://${Cdn.DomainName}'
+  SiteBucket:
+    Value: !Ref Site
+  DistributionId:
+    Value: !Ref Cdn

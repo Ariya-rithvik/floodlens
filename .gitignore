@@ -1,0 +1,9 @@
+node_modules
+dist
+.aws-sam
+scripts/osm_raw.json
+.env*
+samconfig.toml
+docs/_video
+.claude
+tools/node_modules
