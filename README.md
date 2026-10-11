@@ -6,7 +6,7 @@
 
 Offline-first road-condition evidence for floods and landslides.
 
-[Live app](https://d24y0wbvz1jjie.cloudfront.net) · [Demo video](docs/floodlens-demo.mp4) · [Screenshots](docs/screens)
+[Live app](https://d24y0wbvz1jjie.cloudfront.net) · [Demo video](https://youtu.be/qsutfsbqE8U) · [Screenshots](docs/screens)
 
 WeMakeDevs × AWS Environmental Hacks 2026 · Track: Heat and Water
 
